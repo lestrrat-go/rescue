@@ -12,7 +12,7 @@ type Rescue struct {
 	wg *sync.WaitGroup
 }
 
-func New(ctx context.Context) *Rescue {
+func New() *Rescue {
 	return &Rescue{
 		ch: make(chan interface{}, 1),
 	}
@@ -76,8 +76,8 @@ func NewGroup() *RescueGroup {
 	return &RescueGroup{wg: &sync.WaitGroup{}}
 }
 
-func (rg *RescueGroup) New(ctx context.Context) *Rescue {
-	r := New(ctx)
+func (rg *RescueGroup) New() *Rescue {
+	r := New()
 	r.wg = rg.wg
 	rg.wg.Add(1)
 	return r

@@ -12,7 +12,7 @@ func TestRescueDo(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	r := rescue.New(ctx)
+	r := rescue.New()
 
 	go func(ctx context.Context) {
 		defer rescue.Do(ctx)
@@ -21,7 +21,7 @@ func TestRescueDo(t *testing.T) {
 	}(r.Context(ctx))
 
 	if err := r.Error(ctx); err != nil {
-		fmt.Println("pacni with", err)
+		fmt.Println("panic with", err)
 	}
 }
 
@@ -29,14 +29,14 @@ func TestRescueGo(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	r := rescue.New(ctx)
+	r := rescue.New()
 
 	r.Go(ctx, func() {
 		panic("foo")
 	})
 
 	if err := r.Error(ctx); err != nil {
-		fmt.Println("pacni with", err)
+		fmt.Println("panic with", err)
 	}
 }
 
@@ -50,7 +50,7 @@ func TestRescueGroup(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		i := i
 
-		r := rg.New(ctx)
+		r := rg.New()
 		list = append(list, r)
 		go func(ctx context.Context) {
 			defer rescue.Do(ctx)
