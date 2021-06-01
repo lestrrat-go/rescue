@@ -8,7 +8,7 @@ import (
 	"github.com/lestrrat-go/rescue"
 )
 
-func TestRescue(t *testing.T) {
+func TestRescueDo(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -19,6 +19,21 @@ func TestRescue(t *testing.T) {
 
 		panic("foo")
 	}(r.Context(ctx))
+
+	if err := r.Error(ctx); err != nil {
+		fmt.Println("pacni with", err)
+	}
+}
+
+func TestRescueGo(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	r := rescue.New(ctx)
+
+	r.Go(ctx, func() {
+		panic("foo")
+	})
 
 	if err := r.Error(ctx); err != nil {
 		fmt.Println("pacni with", err)

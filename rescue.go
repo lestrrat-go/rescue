@@ -52,6 +52,13 @@ func Do(ctx context.Context) {
 	}
 }
 
+func (r *Rescue) Go(ctx context.Context, fn func()) {
+	go func(ctx context.Context) {
+		defer Do(ctx)
+		fn()
+	}(r.Context(ctx))
+}
+
 func (r *Rescue) Error(ctx context.Context) interface{} {
 	select {
 	case <-ctx.Done():
