@@ -41,30 +41,50 @@ func TestRescueGo(t *testing.T) {
 }
 
 func TestRescueGroup(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Run("Error", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	rg := rescue.NewGroup()
+		rg := rescue.NewGroup()
 
-	var list []*rescue.Rescue
-	for i := 0; i < 10; i++ {
-		i := i
+		for i := 0; i < 10; i++ {
+			i := i
 
-		r := rg.New()
-		list = append(list, r)
-		go func(ctx context.Context) {
-			defer rescue.Do(ctx)
-			if i%2 == 0 {
-				panic("foo")
-			}
-		}(r.Context(ctx))
-	}
-
-	rg.Wait()
-
-	for i, r := range list {
-		if err := r.Error(ctx); err != nil {
-			fmt.Printf("%d: panic with %s\n", i, err)
+			r := rg.New()
+			go func(ctx context.Context) (err error) {
+				defer rescue.Do(rescue.Bind(ctx, &err))
+				return fmt.Errorf("failure %d", i)
+			}(r.Context(ctx))
 		}
-	}
+
+		rg.Wait()
+
+		for err := range rg.Errors() {
+			fmt.Printf("error with %s\n", err)
+		}
+	})
+	t.Run("Panic", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		rg := rescue.NewGroup()
+
+		for i := 0; i < 10; i++ {
+			i := i
+
+			r := rg.New()
+			go func(ctx context.Context) {
+				defer rescue.Do(ctx)
+				if i%2 == 0 {
+					panic("foo")
+				}
+			}(r.Context(ctx))
+		}
+
+		rg.Wait()
+
+		for err := range rg.Errors() {
+			fmt.Printf("panic with %s\n", err)
+		}
+	})
 }

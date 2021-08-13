@@ -5,6 +5,7 @@ import (
 	"sync"
 )
 
+type identBoundError struct{}
 type identRescue struct{}
 
 // Rescue act as a bridge between a groutine and its caller to communicate
@@ -17,7 +18,8 @@ type Rescue struct {
 // New creates a new Rescue instance
 func New() *Rescue {
 	return &Rescue{
-		ch: make(chan interface{}, 1),
+		// 1 for a panic, 1 for an error = 2 total
+		ch: make(chan interface{}, 2),
 	}
 }
 
@@ -41,6 +43,25 @@ func (r *Rescue) Done() {
 	}
 }
 
+// Bind binds an error to be used as Rescue object.
+//
+//   func Foo() (err error) {
+//      defer rescue.Do(rescue.Bind(ctx, &err))
+//      ...
+//   }
+//
+func Bind(ctx context.Context, errptr *error) context.Context {
+	return context.WithValue(ctx, identBoundError{}, errptr)
+}
+
+func doRescue(ctx context.Context, r *Rescue, obj interface{}) bool {
+	select {
+	case <-ctx.Done():
+	case r.ch <- obj:
+	}
+	return true
+}
+
 // Do detects panics caused in the current goroutine, and passes the value
 // along to the `Rescue` object associated with the context object.
 //
@@ -56,18 +77,17 @@ func Do(ctx context.Context) {
 		defer r.Done()
 	}
 
-	err := recover()
 	if r != nil {
-		select {
-		case <-ctx.Done():
-			return
-		case r.ch <- err:
+		if e := ctx.Value(identBoundError{}); e != nil {
+			doRescue(ctx, r, *(e.(*error)))
 		}
-		return
 	}
 
-	if err != nil {
-		panic(err)
+	if e := recover(); e != nil {
+		doRescue(ctx, r, e)
+		if r == nil {
+			panic(r)
+		}
 	}
 }
 
@@ -96,13 +116,18 @@ func (r *Rescue) Error(ctx context.Context) interface{} {
 
 // RescueGroup is used to apply Rescue to multiple goroutines, and
 // wait for their execution.
-type RescueGroup struct{
-	wg *sync.WaitGroup
+type RescueGroup struct {
+	wg       *sync.WaitGroup
+	elements []*Rescue
+	ch       chan struct{}
 }
 
 // NewGroup creates a new RescueGroup
 func NewGroup() *RescueGroup {
-	return &RescueGroup{wg: &sync.WaitGroup{}}
+	return &RescueGroup{
+		wg: &sync.WaitGroup{},
+		ch: make(chan struct{}),
+	}
 }
 
 // New creates a new Rescue that belongs to this RescueGroup
@@ -110,10 +135,29 @@ func (rg *RescueGroup) New() *Rescue {
 	r := New()
 	r.wg = rg.wg
 	rg.wg.Add(1)
+	rg.elements = append(rg.elements, r)
 	return r
 }
 
 // Wait waits for all Rescue objects to be done
 func (rg *RescueGroup) Wait() {
 	rg.wg.Wait()
+	close(rg.ch)
+}
+
+func (rg *RescueGroup) Errors() chan interface{} {
+	ch := make(chan interface{})
+	go func(ch chan interface{}) {
+		defer close(ch)
+		for _, e := range rg.elements {
+			for err := range e.ch {
+				ch <- err
+			}
+		}
+	}(ch)
+	return ch
+}
+
+func (rg *RescueGroup) Done() <-chan struct{} {
+	return rg.ch
 }
